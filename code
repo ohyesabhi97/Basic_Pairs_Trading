@@ -1,0 +1,62 @@
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import yfinance as yf
+import seaborn
+import statsmodels
+import statsmodels.api as sm
+from statsmodels.tsa.stattools import coint
+
+energy = ['WMB','LNG','MMP','EPD','CVX','KMI','PSX','NS','XOM','SPY']
+data = yf.download(energy, start="2018-07-15", end="2019-07-14")
+data = data['Close']
+
+def find_cointegrated_pairs(data):
+    n = data.shape[1]
+    score_matrix = np.zeros((n, n))
+    pvalue_matrix = np.ones((n, n))
+    keys = data.keys()
+    pairs = []
+    for i in range(n):
+        for j in range(i+1, n):
+            S1 = data[keys[i]]
+            S2 = data[keys[j]]
+            result = coint(S1, S2)
+            score = result[0]
+            pvalue = result[1]
+            score_matrix[i, j] = score
+            pvalue_matrix[i, j] = pvalue
+            if pvalue < 0.01:
+                pairs.append((keys[i], keys[j]))
+    return score_matrix, pvalue_matrix, pairs
+    
+scores, pvalues, pairs = find_cointegrated_pairs(data)
+seaborn.heatmap(pvalues, xticklabels = data.columns, yticklabels = data.columns,cmap = 'plasma', mask = (pvalues >= 0.01))
+
+coint_pairs = [('EPD', 'NS'), ('NS', 'SPY')]
+
+for i in coint_pairs:
+    S1 = data[i[0]]
+    S2 = data[i[1]]
+    score, pvalue, _ = coint(S1, S2)
+    print(pvalue)
+    
+spread = data['EPD'] - data['NS']
+def zscore(stocks):
+    return (stocks - stocks.mean())/np.std(stocks)
+
+zscore(spread).plot()
+plt.axhline(zscore(spread).mean(),c = 'b')
+plt.axhline(1.0, c = 'r', ls = '--')
+plt.axhline(-1.0, c = 'r', ls = '--')
+
+spread_mavg1 = spread.rolling(1).mean()
+spread_mavg20 = spread.rolling(20).mean()
+spread_std20 = spread.rolling(20).std()
+
+zscore_20_1 = (spread_mavg1 - spread_mavg20)/spread_std20
+
+zscore_20_1.plot(label = 'Rolling 20 day z score')
+plt.axhline(0,color = 'black')
+plt.axhline(1, c ='r',ls='--')
+plt.axhline(-1, c ='r',ls='--')
